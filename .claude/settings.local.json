@@ -10,7 +10,17 @@
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_close",
       "Bash(git add:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(npm install:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(node test-scraper.js:*)",
+      "Bash(curl:*)",
+      "Bash(node debug-page-structure.js:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(node:*)",
+      "Bash(del nul)"
     ],
     "additionalDirectories": [
       "C:\\c\\Projects\\nextjs-better-auth-postgresql-starter-kit"

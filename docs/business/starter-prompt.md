@@ -63,10 +63,11 @@ The project already includes several shadcn/ui components (button, dialog, avata
 
 ## What I Want to Build
 
-Basic todo list app with the ability for users to add, remove, update, complete and view todos.
+A Zonaprop data monitor
 
 ## Request
-
+Zonaprop is the largest real estate commerce platform in Argentina. I want to build a platform that helps users track data of listings in Zonaprop
+For now, lets just have a super simple landing page, and a "Quick Extract" tab that allows users to pass a Zonaprop listing url (such as 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) and outputs: Nombre, Dirección, Barrio, M2 cubiertos, M2 totales, Cochera, Dormitorios, Baño, $, and $/m2 (this last one should be a calculation)
 Please help me transform this boilerplate into my actual application. **You MUST completely replace all existing boilerplate code** to match my project requirements. The current implementation is just temporary scaffolding that should be entirely removed and replaced.
 
 ## Final Reminder: COMPLETE REPLACEMENT REQUIRED
