@@ -66,12 +66,11 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
     console.log(`Navigating to search page: ${searchUrl}`);
 
     const response = await page.goto(searchUrl, {
-      waitUntil: 'domcontentloaded', // Less strict than networkidle2
-      timeout: 60000, // 60 seconds for search pages (they can be slow)
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
     });
 
-    // Wait a bit for dynamic content to load
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log(`Response status: ${response?.status()}`);
 
     if (!response || response.status() !== 200) {
       await browser.close();
@@ -82,8 +81,9 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
       };
     }
 
-    // Small delay to appear human-like
-    await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+    // Wait for dynamic content to load
+    console.log('Waiting for dynamic content...');
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Increased to 5 seconds
 
     console.log(`Extracting property URLs from search page...`);
 
@@ -121,16 +121,22 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
     const propertyUrls = extractionResult.urls;
 
     console.log('Debug info:', extractionResult.debugInfo);
+    console.log(`Found ${propertyUrls.length} property URLs`);
+
+    // Take a screenshot for debugging in production
+    if (process.env.NODE_ENV === 'production' && propertyUrls.length === 0) {
+      console.log('No URLs found, taking screenshot for debugging...');
+      const screenshot = await page.screenshot({ encoding: 'base64' });
+      console.log(`Screenshot taken, length: ${screenshot.length}`);
+    }
 
     await browser.close();
-
-    console.log(`Found ${propertyUrls.length} property URLs`);
 
     if (propertyUrls.length === 0) {
       return {
         success: false,
         totalUrls: 0,
-        error: 'No se encontraron propiedades en la página de búsqueda',
+        error: 'No se encontraron propiedades en la página de búsqueda. Posible detección anti-scraping.',
       };
     }
 

@@ -10,8 +10,16 @@ export async function getBrowser() {
     const chromium = await import('@sparticuz/chromium');
     const puppeteerCore = await import('puppeteer-core');
 
+    // Add extra args for better stealth in production
+    const args = [
+      ...chromium.default.args,
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--lang=es-AR',
+    ];
+
     return await puppeteerCore.default.launch({
-      args: chromium.default.args,
+      args,
       defaultViewport: { width: 1920, height: 1080 },
       executablePath: await chromium.default.executablePath(),
       headless: true,
