@@ -246,11 +246,11 @@ export default function ExtractPage() {
                             <img
                               src={prop.imageUrl}
                               alt={prop.nombre}
-                              className="w-20 h-20 object-cover rounded"
+                              className="w-32 h-24 object-cover rounded"
                               loading="lazy"
                             />
                           ) : (
-                            <div className="w-20 h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+                            <div className="w-32 h-24 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
                               Sin foto
                             </div>
                           )}

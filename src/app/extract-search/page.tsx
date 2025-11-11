@@ -409,15 +409,15 @@ export default function ExtractSearchPage() {
                           <img
                             src={prop.imageUrl}
                             alt={prop.nombre || 'Propiedad'}
-                            className="w-20 h-20 object-cover rounded"
+                            className="w-32 h-24 object-cover rounded"
                             loading="lazy"
                           />
                         ) : prop.status === 'completed' ? (
-                          <div className="w-20 h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+                          <div className="w-32 h-24 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
                             Sin foto
                           </div>
                         ) : (
-                          <div className="w-20 h-20 bg-muted/50 rounded" />
+                          <div className="w-32 h-24 bg-muted/50 rounded" />
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm max-w-xs truncate" title={prop.nombre}>
