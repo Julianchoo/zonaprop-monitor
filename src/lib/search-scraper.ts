@@ -211,28 +211,44 @@ export async function extractSearchResults(searchUrl: string, maxProperties: num
  */
 export async function* extractSearchResultsWithProgress(
   searchUrl: string,
-  maxProperties: number = 50
+  maxProperties: number = 50,
+  existingUrls?: string[],
+  startIndex: number = 0
 ) {
-  // Step 1: Get all property URLs from search page
-  const searchResult = await scrapeSearchPageUrls(searchUrl);
+  let urlsToExtract: string[];
+  let totalFoundInSearch: number;
 
-  if (!searchResult.success || !searchResult.propertyUrls) {
+  // If URLs are provided, use them (for chunked processing)
+  if (existingUrls && existingUrls.length > 0) {
+    urlsToExtract = existingUrls.slice(startIndex, startIndex + maxProperties);
+    totalFoundInSearch = existingUrls.length;
+  } else {
+    // Step 1: Get all property URLs from search page
+    const searchResult = await scrapeSearchPageUrls(searchUrl);
+
+    if (!searchResult.success || !searchResult.propertyUrls) {
+      yield {
+        type: 'error' as const,
+        error: searchResult.error || 'Error al extraer URLs de búsqueda',
+      };
+      return;
+    }
+
+    urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
+    totalFoundInSearch = searchResult.totalUrls;
+
+    // Send initial URLs only if this is the first call (not chunked)
     yield {
-      type: 'error' as const,
-      error: searchResult.error || 'Error al extraer URLs de búsqueda',
+      type: 'urls' as const,
+      urls: searchResult.propertyUrls,
+      totalFoundInSearch: totalFoundInSearch,
     };
-    return;
   }
 
-  // Limit the number of properties to extract
-  const urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
-
-  // Send initial URLs
-  yield {
-    type: 'urls' as const,
-    urls: urlsToExtract,
-    totalFoundInSearch: searchResult.totalUrls,
-  };
+  // If maxProperties is 0, just return URLs without scraping
+  if (maxProperties === 0) {
+    return;
+  }
 
   // Step 2: Extract data from each property URL one by one
   const results: PropertyData[] = [];
@@ -240,14 +256,15 @@ export async function* extractSearchResultsWithProgress(
 
   for (let i = 0; i < urlsToExtract.length; i++) {
     const url = urlsToExtract[i];
+    const globalIndex = startIndex + i;
 
     // Notify which property is being scraped
     yield {
       type: 'scraping' as const,
-      index: i,
+      index: globalIndex,
       url,
-      progress: i,
-      total: urlsToExtract.length,
+      progress: globalIndex,
+      total: totalFoundInSearch,
     };
 
     const result = await scrapeZonapropListing(url);
@@ -256,14 +273,14 @@ export async function* extractSearchResultsWithProgress(
       results.push(result.data);
       yield {
         type: 'property' as const,
-        index: i,
+        index: globalIndex,
         data: result.data,
       };
     } else {
       errors.push({ url, error: result.error || 'Error desconocido' });
       yield {
         type: 'error_property' as const,
-        index: i,
+        index: globalIndex,
         url,
         error: result.error || 'Error desconocido',
       };

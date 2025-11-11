@@ -65,6 +65,7 @@ export default function ExtractSearchPage() {
         return;
       }
 
+      // Step 1: Get all URLs from search page
       const response = await fetch("/api/extract-search-stream", {
         method: "POST",
         headers: {
@@ -75,6 +76,77 @@ export default function ExtractSearchPage() {
 
       if (!response.ok) {
         throw new Error("Error al iniciar extracción");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No se pudo leer la respuesta");
+      }
+
+      let allUrls: string[] = [];
+
+      // Read the URLs response
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'urls') {
+              allUrls = data.urls;
+              // Initialize properties with pending status
+              setProperties(data.urls.map((url: string) => ({
+                url,
+                status: 'pending' as const,
+              })));
+              setTotalFoundInSearch(data.totalFoundInSearch);
+            } else if (data.type === 'error') {
+              throw new Error(data.error);
+            }
+          }
+        }
+      }
+
+      if (allUrls.length === 0) {
+        throw new Error("No se encontraron propiedades");
+      }
+
+      // Step 2: Process URLs in chunks of 10
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < allUrls.length; i += CHUNK_SIZE) {
+        await processChunk(allUrls, i, CHUNK_SIZE);
+      }
+
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+      setLoading(false);
+    }
+  };
+
+  const processChunk = async (allUrls: string[], startIndex: number, chunkSize: number) => {
+    try {
+      const response = await fetch("/api/extract-search-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          urls: allUrls,
+          startIndex,
+          limit: chunkSize
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error procesando chunk ${startIndex}`);
       }
 
       const reader = response.body?.getReader();
@@ -96,15 +168,6 @@ export default function ExtractSearchPage() {
             const data = JSON.parse(line.slice(6));
 
             switch (data.type) {
-              case 'urls':
-                // Initialize properties with pending status
-                setProperties(data.urls.map((url: string) => ({
-                  url,
-                  status: 'pending' as const,
-                })));
-                setTotalFoundInSearch(data.totalFoundInSearch);
-                break;
-
               case 'scraping':
                 // Mark property as currently scraping
                 setProperties(prev => prev.map((prop, idx) =>
@@ -126,19 +189,22 @@ export default function ExtractSearchPage() {
                 ));
                 break;
 
-              case 'complete':
-                setLoading(false);
-                break;
-
               case 'error':
-                throw new Error(data.error);
+                console.error(`Error in chunk ${startIndex}:`, data.error);
+                // Mark remaining properties in this chunk as error
+                for (let i = startIndex; i < Math.min(startIndex + chunkSize, properties.length); i++) {
+                  setProperties(prev => prev.map((prop, idx) =>
+                    idx === i && prop.status === 'pending' ? { ...prop, status: 'error' as const, error: 'Error en el chunk' } : prop
+                  ));
+                }
+                break;
             }
           }
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
-      setLoading(false);
+      console.error(`Error processing chunk ${startIndex}:`, err);
+      // Mark chunk properties as error but continue with next chunk
     }
   };
 

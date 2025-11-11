@@ -20,7 +20,13 @@
       "Bash(node debug-page-structure.js:*)",
       "Bash(npx shadcn@latest add:*)",
       "Bash(node:*)",
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nRename app to Zonaprop Monitor and remove Leon van Zyl references\n\n- Updated package name to zonaprop-monitor\n- Changed metadata title and description to Zonaprop Monitor\n- Removed Leon van Zyl attribution from footer\n- Added new scraper functionality and extract pages\n- Added UI components (alert, textarea)\n- Switched from pnpm to npm lockfile\n- Added database migrations\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)",
+      "Bash(git remote set-url:*)",
+      "Bash(git push:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix sign-in button in production by adding baseURL and secret to Better Auth config\n\n- Added baseURL configuration using NEXT_PUBLIC_APP_URL\n- Added secret configuration using BETTER_AUTH_SECRET\n- This fixes the inactive sign-in button in production\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)"
     ],
     "additionalDirectories": [
       "C:\\c\\Projects\\nextjs-better-auth-postgresql-starter-kit"

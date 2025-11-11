@@ -3,7 +3,9 @@ import { extractSearchResultsWithProgress } from "@/lib/search-scraper";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
-export const maxDuration = 600;
+// Vercel hobby plan limit is 300 seconds
+// Processing 10 properties at ~3s each = ~30s + buffer = 60s
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,17 +22,56 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { searchUrl } = body;
+    const { searchUrl, urls, startIndex = 0, limit = 10 } = body;
 
-    // Validate input
+    // If URLs are provided, process them directly (chunked processing)
+    if (urls && Array.isArray(urls)) {
+      console.log(`Processing chunk: ${startIndex} to ${startIndex + limit}`);
+
+      // Create a readable stream for SSE
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const update of extractSearchResultsWithProgress(
+              '',
+              limit,
+              urls,
+              startIndex
+            )) {
+              const data = `data: ${JSON.stringify(update)}\n\n`;
+              controller.enqueue(encoder.encode(data));
+            }
+            controller.close();
+          } catch (error) {
+            console.error("Error in stream:", error);
+            const errorData = `data: ${JSON.stringify({
+              type: 'error',
+              error: error instanceof Error ? error.message : 'Error desconocido'
+            })}\n\n`;
+            controller.enqueue(encoder.encode(errorData));
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // If searchUrl is provided, just return the URLs (first step)
     if (!searchUrl || typeof searchUrl !== 'string') {
       return new Response(
-        JSON.stringify({ error: "Se requiere una URL de búsqueda" }),
+        JSON.stringify({ error: "Se requiere una URL de búsqueda o lista de URLs" }),
         { status: 400 }
       );
     }
 
-    // Validate that URL is from Zonaprop
     if (!searchUrl.includes("zonaprop.com")) {
       return new Response(
         JSON.stringify({ error: "La URL debe ser de zonaprop.com" }),
@@ -38,20 +79,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`Starting streaming search extraction for: ${searchUrl}`);
+    console.log(`Extracting URLs from search page: ${searchUrl}`);
 
-    // Create a readable stream for SSE
+    // Just extract and return URLs (no scraping yet)
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const update of extractSearchResultsWithProgress(searchUrl, 50)) {
-            // Send the update as SSE
-            const data = `data: ${JSON.stringify(update)}\n\n`;
-            controller.enqueue(encoder.encode(data));
+          for await (const update of extractSearchResultsWithProgress(searchUrl, 0)) {
+            // Only send the 'urls' event, stop before scraping
+            if (update.type === 'urls') {
+              const data = `data: ${JSON.stringify(update)}\n\n`;
+              controller.enqueue(encoder.encode(data));
+              controller.close();
+              return;
+            }
           }
-
-          // Close the stream
           controller.close();
         } catch (error) {
           console.error("Error in stream:", error);

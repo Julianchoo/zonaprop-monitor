@@ -5,8 +5,9 @@ import { headers } from "next/headers";
 
 const MAX_PROPERTIES = 50;
 
-// Set timeout to 10 minutes (50 properties * ~4 seconds each = ~3.5 minutes + buffer)
-export const maxDuration = 600;
+// Vercel hobby plan limit is 300 seconds - this endpoint is not used anymore
+// Use extract-search-stream instead for chunked processing
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
