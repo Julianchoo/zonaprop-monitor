@@ -148,12 +148,13 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
 
       // Extract cover image URL
       let imageUrl = '';
-      // Try multiple selectors for the cover image, being specific to avoid flags/icons
+      // Try multiple selectors for the cover image, prioritizing Zonaprop's specific structure
       const imgSelectors = [
+        'img[class*="imgProperty"]', // Zonaprop uses imageGrid-module__imgProperty
+        'img[src*="zonapropcdn.com"]', // Direct match for Zonaprop CDN
+        'img[src*="avisos"]', // Zonaprop images are in /avisos/ path
         'img[alt*="Foto"]',
         'img[alt*="foto"]',
-        'img[alt*="Imagen"]',
-        'img[alt*="imagen"]',
         '.gallery-image img',
         '.cover-image img',
         'img[class*="gallery"]',
