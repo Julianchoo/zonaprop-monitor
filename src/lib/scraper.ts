@@ -1,5 +1,6 @@
 export interface PropertyData {
   url: string;
+  imageUrl: string | null;
   nombre: string;
   direccion: string;
   barrio: string;
@@ -145,6 +146,26 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
       // Extract property title from h1
       const nombre = getText('h1') || '';
 
+      // Extract cover image URL
+      let imageUrl = '';
+      // Try multiple selectors for the cover image
+      const imgSelectors = [
+        '.gallery-image img',
+        '.cover-image img',
+        'img[class*="cover"]',
+        'img[class*="gallery"]',
+        '.image-container img',
+        'main img',
+      ];
+
+      for (const selector of imgSelectors) {
+        const img = document.querySelector(selector);
+        if (img) {
+          imageUrl = img.getAttribute('src') || img.getAttribute('data-src') || '';
+          if (imageUrl) break;
+        }
+      }
+
       // Extract address from location section
       const addressElement = document.querySelector('.section-location-property');
       const fullAddress = addressElement?.textContent?.trim() || '';
@@ -275,6 +296,7 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
 
       return {
         nombre,
+        imageUrl,
         direccion,
         barrio,
         precioText,
@@ -306,6 +328,7 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
 
     const propertyData: PropertyData = {
       url,
+      imageUrl: data.imageUrl || null,
       nombre: data.nombre,
       direccion: data.direccion,
       barrio: data.barrio,

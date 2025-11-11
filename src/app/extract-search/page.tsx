@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 
 interface PropertyData {
   url: string;
+  imageUrl: string | null;
   nombre: string;
   direccion: string;
   barrio: string;
@@ -360,6 +361,7 @@ export default function ExtractSearchPage() {
                 <thead className="bg-muted">
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-medium">Estado</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium">Foto</th>
                     <th className="px-4 py-3 text-left text-sm font-medium">Nombre</th>
                     <th className="px-4 py-3 text-left text-sm font-medium">Dirección</th>
                     <th className="px-4 py-3 text-left text-sm font-medium">Barrio</th>
@@ -399,6 +401,23 @@ export default function ExtractSearchPage() {
                         )}
                         {prop.status === 'error' && (
                           <span className="text-red-600" title={prop.error}>✗</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {prop.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={prop.imageUrl}
+                            alt={prop.nombre || 'Propiedad'}
+                            className="w-20 h-20 object-cover rounded"
+                            loading="lazy"
+                          />
+                        ) : prop.status === 'completed' ? (
+                          <div className="w-20 h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+                            Sin foto
+                          </div>
+                        ) : (
+                          <div className="w-20 h-20 bg-muted/50 rounded" />
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm max-w-xs truncate" title={prop.nombre}>

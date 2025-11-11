@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 
 interface PropertyData {
   url: string;
+  imageUrl: string | null;
   nombre: string;
   direccion: string;
   barrio: string;
@@ -220,6 +221,7 @@ export default function ExtractPage() {
                 <table className="w-full">
                   <thead className="bg-muted">
                     <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Foto</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Nombre</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Dirección</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Barrio</th>
@@ -238,6 +240,21 @@ export default function ExtractPage() {
                   <tbody className="divide-y">
                     {result.results.map((prop, index) => (
                       <tr key={index} className="hover:bg-muted/50">
+                        <td className="px-4 py-3">
+                          {prop.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={prop.imageUrl}
+                              alt={prop.nombre}
+                              className="w-20 h-20 object-cover rounded"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-20 h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+                              Sin foto
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-sm max-w-xs truncate" title={prop.nombre}>
                           {prop.nombre}
                         </td>
