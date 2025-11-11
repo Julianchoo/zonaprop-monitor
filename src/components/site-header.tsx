@@ -46,6 +46,15 @@ export function SiteHeader() {
               >
                 Extraer Datos
               </Link>
+              <Link
+                href="/extract-search"
+                className={cn(
+                  "text-sm font-medium transition-colors hover:text-primary",
+                  pathname === "/extract-search" ? "text-foreground" : "text-muted-foreground"
+                )}
+              >
+                Extraer Búsqueda
+              </Link>
             </nav>
           </div>
 

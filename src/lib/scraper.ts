@@ -116,9 +116,12 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
 
     // Navigate to the listing
     const response = await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
     });
+
+    // Wait for dynamic content to load
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     console.log(`Response status: ${response?.status()}`);
     console.log(`Final URL: ${page.url()}`);
