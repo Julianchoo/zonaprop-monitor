@@ -44,21 +44,8 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
   let browser;
 
   try {
-    // Use regular puppeteer with manual evasion techniques
-    const puppeteer = (await import('puppeteer')).default;
-
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--disable-web-security',
-        '--disable-features=site-per-process',
-        '--lang=es-AR',
-      ],
-    });
+    const { getBrowser } = await import('./browser');
+    browser = await getBrowser();
 
     const page = await browser.newPage();
 
@@ -143,7 +130,8 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
     console.log(`Page title: ${pageTitle}`);
 
     // Extract data from the page
-    const data = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await (page as any).evaluate(() => {
       // Helper to get text content safely
       const getText = (selector: string): string | null => {
         const element = document.querySelector(selector);

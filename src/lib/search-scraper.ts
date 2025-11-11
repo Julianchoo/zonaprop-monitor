@@ -14,20 +14,8 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
   let browser;
 
   try {
-    const puppeteer = (await import('puppeteer')).default;
-
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--disable-web-security',
-        '--disable-features=site-per-process',
-        '--lang=es-AR',
-      ],
-    });
+    const { getBrowser } = await import('./browser');
+    browser = await getBrowser();
 
     const page = await browser.newPage();
 
@@ -100,7 +88,8 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
     console.log(`Extracting property URLs from search page...`);
 
     // Extract all property URLs from the search results
-    const extractionResult = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const extractionResult = await (page as any).evaluate(() => {
       const urls: string[] = [];
       const debugInfo: string[] = [];
 
