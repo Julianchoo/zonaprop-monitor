@@ -148,21 +148,35 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
 
       // Extract cover image URL
       let imageUrl = '';
-      // Try multiple selectors for the cover image
+      // Try multiple selectors for the cover image, being specific to avoid flags/icons
       const imgSelectors = [
+        'img[alt*="Foto"]',
+        'img[alt*="foto"]',
+        'img[alt*="Imagen"]',
+        'img[alt*="imagen"]',
         '.gallery-image img',
         '.cover-image img',
-        'img[class*="cover"]',
         'img[class*="gallery"]',
         '.image-container img',
-        'main img',
+        'article img',
+        '[data-testid*="image"] img',
+        '[data-testid*="photo"] img',
       ];
 
       for (const selector of imgSelectors) {
         const img = document.querySelector(selector);
         if (img) {
-          imageUrl = img.getAttribute('src') || img.getAttribute('data-src') || '';
-          if (imageUrl) break;
+          const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+          // Make sure it's not an icon, flag, or logo (these are usually small or in specific paths)
+          if (src &&
+              !src.includes('flag') &&
+              !src.includes('icon') &&
+              !src.includes('logo') &&
+              !src.includes('marker') &&
+              src.length > 30) { // Real image URLs are typically longer
+            imageUrl = src;
+            break;
+          }
         }
       }
 
