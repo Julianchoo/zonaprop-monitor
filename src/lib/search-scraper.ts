@@ -70,37 +70,90 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
       'Sec-Ch-Ua-Platform': '"Windows"',
     });
 
+    // First, navigate to the first page to get total count
+    console.log(`Navigating to search page: ${searchUrl}`);
+
+    const response = await page.goto(searchUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
+    });
+
+    console.log(`Response status: ${response?.status()}`);
+
+    if (!response || response.status() !== 200) {
+      await browser.close();
+      return {
+        success: false,
+        totalUrls: 0,
+        error: `HTTP ${response?.status() || 'unknown'}: No se pudo acceder a la página de búsqueda`,
+      };
+    }
+
+    // Wait for dynamic content to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Extract total number of results from the page
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const totalResultsInfo = await (page as any).evaluate(() => {
+      // Look for text like "402 Propiedades e inmuebles..."
+      const headingSelectors = ['h1', '.postings-title', '[class*="title"]', '[class*="heading"]'];
+
+      for (const selector of headingSelectors) {
+        const elements = document.querySelectorAll(selector);
+        for (const element of elements) {
+          const text = element.textContent || '';
+          // Match patterns like "402 Propiedades" or "402 Propiedades e inmuebles"
+          const match = text.match(/^(\d+)\s+Propiedades/i);
+          if (match) {
+            return {
+              totalResults: parseInt(match[1], 10),
+              text: text.trim()
+            };
+          }
+        }
+      }
+      return { totalResults: 0, text: '' };
+    });
+
+    console.log(`Total results from page: ${totalResultsInfo.totalResults} (${totalResultsInfo.text})`);
+
+    // Calculate how many pages we need to scrape (30 properties per page)
+    const propertiesPerPage = 30;
+    const totalPages = totalResultsInfo.totalResults > 0
+      ? Math.min(Math.ceil(totalResultsInfo.totalResults / propertiesPerPage), maxPages)
+      : maxPages;
+
+    console.log(`Will scrape ${totalPages} pages to get all ${totalResultsInfo.totalResults} properties`);
+
     const allPropertyUrls = new Set<string>();
     let currentPage = 1;
-    let hasMorePages = true;
 
-    // Loop through pages until we reach maxPages or there are no more pages
-    while (currentPage <= maxPages && hasMorePages) {
+    // Loop through all necessary pages
+    while (currentPage <= totalPages) {
       // Build URL for current page
       let pageUrl = searchUrl;
       if (currentPage > 1) {
         // Zonaprop uses "-pagina-2.html", "-pagina-3.html", etc.
-        // Insert before ".html"
         pageUrl = searchUrl.replace(/\.html$/, `-pagina-${currentPage}.html`);
       }
 
-      console.log(`Navigating to page ${currentPage}: ${pageUrl}`);
+      console.log(`Extracting from page ${currentPage}/${totalPages}: ${pageUrl}`);
 
-      const response = await page.goto(pageUrl, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000,
-      });
+      // Navigate to page if not already there (we already navigated to page 1)
+      if (currentPage > 1) {
+        const pageResponse = await page.goto(pageUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 60000,
+        });
 
-      console.log(`Response status for page ${currentPage}: ${response?.status()}`);
+        if (!pageResponse || pageResponse.status() !== 200) {
+          console.log(`Page ${currentPage} returned error, stopping pagination`);
+          break;
+        }
 
-      if (!response || response.status() !== 200) {
-        console.log(`Page ${currentPage} returned error, stopping pagination`);
-        hasMorePages = false;
-        break;
+        // Wait for dynamic content to load
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
-
-      // Wait for dynamic content to load
-      await new Promise(resolve => setTimeout(resolve, 3000));
 
       console.log(`Extracting property URLs from page ${currentPage}...`);
 
@@ -145,16 +198,10 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
 
       console.log(`Added ${newUrlsAdded} new unique URLs (total: ${allPropertyUrls.size})`);
 
-      // If we didn't find any new URLs, we've probably reached the end
-      if (newUrlsAdded === 0) {
-        console.log('No new URLs found, stopping pagination');
-        hasMorePages = false;
-      }
-
       currentPage++;
 
       // Add a small delay between page requests
-      if (hasMorePages && currentPage <= maxPages) {
+      if (currentPage <= totalPages) {
         await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
       }
     }
