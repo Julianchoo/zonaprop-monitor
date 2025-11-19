@@ -8,9 +8,9 @@ export interface SearchScraperResult {
 }
 
 /**
- * Extract all property URLs from a Zonaprop search page
+ * Extract all property URLs from a Zonaprop search page (with pagination)
  */
-export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScraperResult> {
+export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number = 20): Promise<SearchScraperResult> {
   let browser;
 
   try {
@@ -70,74 +70,100 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
       'Sec-Ch-Ua-Platform': '"Windows"',
     });
 
-    console.log(`Navigating to search page: ${searchUrl}`);
+    const allPropertyUrls = new Set<string>();
+    let currentPage = 1;
+    let hasMorePages = true;
 
-    const response = await page.goto(searchUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000,
-    });
+    // Loop through pages until we reach maxPages or there are no more pages
+    while (currentPage <= maxPages && hasMorePages) {
+      // Build URL for current page
+      let pageUrl = searchUrl;
+      if (currentPage > 1) {
+        // Zonaprop uses "-pagina-2.html", "-pagina-3.html", etc.
+        // Insert before ".html"
+        pageUrl = searchUrl.replace(/\.html$/, `-pagina-${currentPage}.html`);
+      }
 
-    console.log(`Response status: ${response?.status()}`);
+      console.log(`Navigating to page ${currentPage}: ${pageUrl}`);
 
-    if (!response || response.status() !== 200) {
-      await browser.close();
-      return {
-        success: false,
-        totalUrls: 0,
-        error: `HTTP ${response?.status() || 'unknown'}: No se pudo acceder a la página de búsqueda`,
-      };
-    }
-
-    // Wait for dynamic content to load
-    console.log('Waiting for dynamic content...');
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Increased to 5 seconds
-
-    console.log(`Extracting property URLs from search page...`);
-
-    // Extract all property URLs from the search results
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const extractionResult = await (page as any).evaluate(() => {
-      const urls: string[] = [];
-      const debugInfo: string[] = [];
-
-      // Try to find all links on the page
-      const allLinks = document.querySelectorAll('a');
-      debugInfo.push(`Total links found: ${allLinks.length}`);
-
-      const seenUrls = new Set<string>();
-
-      allLinks.forEach((element) => {
-        const href = element.getAttribute('href');
-        if (href && href.includes('/propiedades/')) {
-          // Build full URL
-          const fullUrl = href.startsWith('http') ? href : `https://www.zonaprop.com.ar${href}`;
-
-          // Only add unique URLs
-          if (!seenUrls.has(fullUrl)) {
-            seenUrls.add(fullUrl);
-            urls.push(fullUrl);
-          }
-        }
+      const response = await page.goto(pageUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
       });
 
-      debugInfo.push(`Property URLs found: ${urls.length}`);
+      console.log(`Response status for page ${currentPage}: ${response?.status()}`);
 
-      return { urls, debugInfo };
-    });
+      if (!response || response.status() !== 200) {
+        console.log(`Page ${currentPage} returned error, stopping pagination`);
+        hasMorePages = false;
+        break;
+      }
 
-    const propertyUrls = extractionResult.urls;
+      // Wait for dynamic content to load
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-    console.log('Debug info:', extractionResult.debugInfo);
-    console.log(`Found ${propertyUrls.length} property URLs`);
+      console.log(`Extracting property URLs from page ${currentPage}...`);
 
-    // Take a screenshot for debugging in production
-    if (process.env.NODE_ENV === 'production' && propertyUrls.length === 0) {
-      console.log('No URLs found, taking screenshot for debugging...');
-      const screenshot = await page.screenshot({ encoding: 'base64' });
-      console.log(`Screenshot taken, length: ${screenshot.length}`);
+      // Extract all property URLs from the current search results page
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const extractionResult = await (page as any).evaluate(() => {
+        const urls: string[] = [];
+        const debugInfo: string[] = [];
+
+        // Try to find all links on the page
+        const allLinks = document.querySelectorAll('a');
+        debugInfo.push(`Total links found: ${allLinks.length}`);
+
+        const seenUrls = new Set<string>();
+
+        allLinks.forEach((element) => {
+          const href = element.getAttribute('href');
+          if (href && href.includes('/propiedades/')) {
+            // Build full URL
+            const fullUrl = href.startsWith('http') ? href : `https://www.zonaprop.com.ar${href}`;
+
+            // Only add unique URLs
+            if (!seenUrls.has(fullUrl)) {
+              seenUrls.add(fullUrl);
+              urls.push(fullUrl);
+            }
+          }
+        });
+
+        debugInfo.push(`Property URLs found on this page: ${urls.length}`);
+
+        return { urls, debugInfo };
+      });
+
+      console.log('Debug info:', extractionResult.debugInfo);
+      console.log(`Found ${extractionResult.urls.length} property URLs on page ${currentPage}`);
+
+      // Add URLs to our set (automatically handles duplicates)
+      const beforeCount = allPropertyUrls.size;
+      extractionResult.urls.forEach((url: string) => allPropertyUrls.add(url));
+      const newUrlsAdded = allPropertyUrls.size - beforeCount;
+
+      console.log(`Added ${newUrlsAdded} new unique URLs (total: ${allPropertyUrls.size})`);
+
+      // If we didn't find any new URLs, we've probably reached the end
+      if (newUrlsAdded === 0) {
+        console.log('No new URLs found, stopping pagination');
+        hasMorePages = false;
+      }
+
+      currentPage++;
+
+      // Add a small delay between page requests
+      if (hasMorePages && currentPage <= maxPages) {
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+      }
     }
 
     await browser.close();
+
+    const propertyUrls = Array.from(allPropertyUrls);
+
+    console.log(`Total unique property URLs found across ${currentPage - 1} pages: ${propertyUrls.length}`);
 
     if (propertyUrls.length === 0) {
       return {
