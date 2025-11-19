@@ -39,34 +39,34 @@ export default function ExtractSearchPage() {
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [totalFoundInSearch, setTotalFoundInSearch] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [estimatedTime, setEstimatedTime] = useState("");
+  const [skipImages, setSkipImages] = useState(false);
 
   // Redirect if not authenticated
   if (!isPending && !session) {
     redirect("/");
   }
 
-  const handleExtract = async () => {
-    setLoading(true);
+  const handleInitialCheck = async () => {
     setError(null);
-    setProperties([]);
-    setTotalFoundInSearch(null);
+
+    const trimmedUrl = searchUrl.trim();
+
+    if (!trimmedUrl) {
+      setError("Por favor ingresa una URL de búsqueda");
+      return;
+    }
+
+    if (!trimmedUrl.includes("zonaprop.com")) {
+      setError("La URL debe ser de zonaprop.com");
+      return;
+    }
+
+    setLoading(true);
 
     try {
-      const trimmedUrl = searchUrl.trim();
-
-      if (!trimmedUrl) {
-        setError("Por favor ingresa una URL de búsqueda");
-        setLoading(false);
-        return;
-      }
-
-      if (!trimmedUrl.includes("zonaprop.com")) {
-        setError("La URL debe ser de zonaprop.com");
-        setLoading(false);
-        return;
-      }
-
-      // Step 1: Get all URLs from search page
+      // Step 1: Get all URLs from search page to show confirmation
       const response = await fetch("/api/extract-search-stream", {
         method: "POST",
         headers: {
@@ -86,8 +86,6 @@ export default function ExtractSearchPage() {
         throw new Error("No se pudo leer la respuesta");
       }
 
-      let allUrls: string[] = [];
-
       // Read the URLs response
       while (true) {
         const { done, value } = await reader.read();
@@ -101,28 +99,65 @@ export default function ExtractSearchPage() {
             const data = JSON.parse(line.slice(6));
 
             if (data.type === 'urls') {
-              allUrls = data.urls;
-              // Initialize properties with pending status
-              setProperties(data.urls.map((url: string) => ({
-                url,
-                status: 'pending' as const,
-              })));
-              setTotalFoundInSearch(data.totalFoundInSearch);
+              const totalProps = data.urls.length;
+              setTotalFoundInSearch(totalProps);
+
+              // Calculate estimated time
+              // With parallel processing (5 concurrent), approximately 0.4 min per property
+              const estimatedMinutes = Math.ceil((totalProps * 0.4) / 1);
+
+              let timeString = "";
+              if (estimatedMinutes < 60) {
+                timeString = `${estimatedMinutes} minutos`;
+              } else {
+                const hours = Math.floor(estimatedMinutes / 60);
+                const mins = estimatedMinutes % 60;
+                timeString = `${hours} hora${hours > 1 ? 's' : ''}${mins > 0 ? ` y ${mins} minutos` : ''}`;
+              }
+
+              setEstimatedTime(timeString);
+
+              // Show confirmation if more than 100 properties
+              if (totalProps > 100) {
+                setSkipImages(true); // Auto-enable skip images for large searches
+                setShowConfirmDialog(true);
+                setLoading(false);
+                return;
+              } else {
+                // Proceed directly for smaller searches
+                await proceedWithExtraction(data.urls);
+              }
             } else if (data.type === 'error') {
               throw new Error(data.error);
             }
           }
         }
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+      setLoading(false);
+    }
+  };
 
-      if (allUrls.length === 0) {
-        throw new Error("No se encontraron propiedades");
-      }
+  const proceedWithExtraction = async (allUrls: string[]) => {
+    setShowConfirmDialog(false);
+    setLoading(true);
+    setError(null);
+    setProperties([]);
+
+    try {
+      // Initialize properties with pending status
+      setProperties(allUrls.map((url: string) => ({
+        url,
+        status: 'pending' as const,
+      })));
 
       // Step 2: Process URLs in chunks of 10
       const CHUNK_SIZE = 10;
+      const CONCURRENCY = 5; // Process 5 properties in parallel
+
       for (let i = 0; i < allUrls.length; i += CHUNK_SIZE) {
-        await processChunk(allUrls, i, CHUNK_SIZE);
+        await processChunk(allUrls, i, CHUNK_SIZE, CONCURRENCY, skipImages);
       }
 
       setLoading(false);
@@ -132,7 +167,61 @@ export default function ExtractSearchPage() {
     }
   };
 
-  const processChunk = async (allUrls: string[], startIndex: number, chunkSize: number) => {
+  const handleExtract = async () => {
+    await handleInitialCheck();
+  };
+
+  const handleConfirmExtraction = () => {
+    if (totalFoundInSearch && properties.length === 0) {
+      // Need to re-fetch URLs since we only got count
+      const trimmedUrl = searchUrl.trim();
+      fetch("/api/extract-search-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ searchUrl: trimmedUrl }),
+      })
+        .then(async (response) => {
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          if (!reader) return;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'urls') {
+                  proceedWithExtraction(data.urls);
+                  return;
+                }
+              }
+            }
+          }
+        });
+    }
+  };
+
+  const handleCancelExtraction = () => {
+    setShowConfirmDialog(false);
+    setLoading(false);
+    setTotalFoundInSearch(null);
+    setEstimatedTime("");
+  };
+
+  const processChunk = async (
+    allUrls: string[],
+    startIndex: number,
+    chunkSize: number,
+    concurrency: number = 5,
+    skipImages: boolean = false
+  ) => {
     try {
       const response = await fetch("/api/extract-search-stream", {
         method: "POST",
@@ -142,9 +231,12 @@ export default function ExtractSearchPage() {
         body: JSON.stringify({
           urls: allUrls,
           startIndex,
-          limit: chunkSize
+          limit: chunkSize,
+          concurrency,
+          skipImages
         }),
       });
+
 
       if (!response.ok) {
         throw new Error(`Error procesando chunk ${startIndex}`);
@@ -326,6 +418,35 @@ export default function ExtractSearchPage() {
             </div>
           </CardContent>
         </Card>
+
+        {showConfirmDialog && (
+          <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription>
+              <div className="space-y-3">
+                <div>
+                  <p className="font-semibold text-amber-900 dark:text-amber-100">
+                    Se encontraron {totalFoundInSearch} propiedades en la búsqueda
+                  </p>
+                  <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
+                    Tiempo estimado: <strong>{estimatedTime}</strong>
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    Las fotos se omitirán automáticamente para acelerar el proceso.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleConfirmExtraction} size="sm" variant="default">
+                    Continuar
+                  </Button>
+                  <Button onClick={handleCancelExtraction} size="sm" variant="outline">
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {error && (
           <Alert variant="destructive">

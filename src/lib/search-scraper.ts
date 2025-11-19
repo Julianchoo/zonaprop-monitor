@@ -305,3 +305,117 @@ export async function* extractSearchResultsWithProgress(
     errors,
   };
 }
+
+/**
+ * Extract property data with parallel scraping and progress updates
+ * Scrapes multiple properties concurrently for faster processing
+ */
+export async function* extractSearchResultsParallel(
+  searchUrl: string,
+  maxProperties: number = 50,
+  existingUrls?: string[],
+  startIndex: number = 0,
+  concurrency: number = 5,
+  skipImages: boolean = false
+) {
+  let urlsToExtract: string[];
+  let totalFoundInSearch: number;
+
+  // If URLs are provided, use them (for chunked processing)
+  if (existingUrls && existingUrls.length > 0) {
+    urlsToExtract = existingUrls.slice(startIndex, startIndex + maxProperties);
+    totalFoundInSearch = existingUrls.length;
+  } else {
+    // Step 1: Get all property URLs from search page
+    const searchResult = await scrapeSearchPageUrls(searchUrl);
+
+    if (!searchResult.success || !searchResult.propertyUrls) {
+      yield {
+        type: 'error' as const,
+        error: searchResult.error || 'Error al extraer URLs de búsqueda',
+      };
+      return;
+    }
+
+    urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
+    totalFoundInSearch = searchResult.totalUrls;
+
+    // Send initial URLs only if this is the first call (not chunked)
+    yield {
+      type: 'urls' as const,
+      urls: searchResult.propertyUrls,
+      totalFoundInSearch: totalFoundInSearch,
+    };
+  }
+
+  // If maxProperties is 0, just return URLs without scraping
+  if (maxProperties === 0) {
+    return;
+  }
+
+  // Step 2: Extract data from properties in parallel batches
+  const results: PropertyData[] = [];
+  const errors: Array<{ url: string; error: string }> = [];
+
+  // Process in batches of 'concurrency' size
+  for (let batchStart = 0; batchStart < urlsToExtract.length; batchStart += concurrency) {
+    const batchEnd = Math.min(batchStart + concurrency, urlsToExtract.length);
+    const batch = urlsToExtract.slice(batchStart, batchEnd);
+
+    // Notify which properties are being scraped
+    for (let i = 0; i < batch.length; i++) {
+      const globalIndex = startIndex + batchStart + i;
+      yield {
+        type: 'scraping' as const,
+        index: globalIndex,
+        url: batch[i],
+        progress: globalIndex,
+        total: totalFoundInSearch,
+      };
+    }
+
+    // Scrape all properties in this batch concurrently
+    const batchPromises = batch.map((url) => scrapeZonapropListing(url, skipImages));
+    const batchResults = await Promise.all(batchPromises);
+
+    // Process results and yield updates
+    for (let i = 0; i < batchResults.length; i++) {
+      const result = batchResults[i];
+      const url = batch[i];
+      const globalIndex = startIndex + batchStart + i;
+
+      if (result.success && result.data) {
+        results.push(result.data);
+        yield {
+          type: 'property' as const,
+          index: globalIndex,
+          data: result.data,
+        };
+      } else {
+        errors.push({ url, error: result.error || 'Error desconocido' });
+        yield {
+          type: 'error_property' as const,
+          index: globalIndex,
+          url,
+          error: result.error || 'Error desconocido',
+        };
+      }
+    }
+
+    // Add delay between batches (except for the last batch)
+    if (batchEnd < urlsToExtract.length) {
+      const delay = 1000 + Math.random() * 1000; // Shorter delay since we're doing parallel
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // Send final summary
+  yield {
+    type: 'complete' as const,
+    total: urlsToExtract.length,
+    extracted: results.length,
+    failed: errors.length,
+    results,
+    errors,
+  };
+}

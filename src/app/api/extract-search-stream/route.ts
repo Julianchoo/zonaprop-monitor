@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
-import { extractSearchResultsWithProgress } from "@/lib/search-scraper";
+import { extractSearchResultsParallel } from "@/lib/search-scraper";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
 // Vercel hobby plan limit is 300 seconds
-// Processing 10 properties at ~3s each = ~30s + buffer = 60s
+// With parallel processing (5 concurrent), 10 properties takes ~10-15s
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
@@ -22,22 +22,24 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { searchUrl, urls, startIndex = 0, limit = 10 } = body;
+    const { searchUrl, urls, startIndex = 0, limit = 10, concurrency = 5, skipImages = false } = body;
 
     // If URLs are provided, process them directly (chunked processing)
     if (urls && Array.isArray(urls)) {
-      console.log(`Processing chunk: ${startIndex} to ${startIndex + limit}`);
+      console.log(`Processing chunk: ${startIndex} to ${startIndex + limit} (concurrency: ${concurrency}, skipImages: ${skipImages})`);
 
       // Create a readable stream for SSE
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         async start(controller) {
           try {
-            for await (const update of extractSearchResultsWithProgress(
+            for await (const update of extractSearchResultsParallel(
               '',
               limit,
               urls,
-              startIndex
+              startIndex,
+              concurrency,
+              skipImages
             )) {
               const data = `data: ${JSON.stringify(update)}\n\n`;
               controller.enqueue(encoder.encode(data));
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const update of extractSearchResultsWithProgress(searchUrl, 0)) {
+          for await (const update of extractSearchResultsParallel(searchUrl, 0)) {
             // Only send the 'urls' event, stop before scraping
             if (update.type === 'urls') {
               const data = `data: ${JSON.stringify(update)}\n\n`;

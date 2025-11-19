@@ -41,7 +41,7 @@ function extractNumber(text: string | null | undefined): number | null {
 /**
  * Scrape a single Zonaprop listing
  */
-export async function scrapeZonapropListing(url: string): Promise<ScraperResult> {
+export async function scrapeZonapropListing(url: string, skipImages: boolean = false): Promise<ScraperResult> {
   let browser;
 
   try {
@@ -136,7 +136,7 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
 
     // Extract data from the page
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = await (page as any).evaluate(() => {
+    const data = await (page as any).evaluate((skipImages: boolean) => {
       // Helper to get text content safely
       const getText = (selector: string): string | null => {
         const element = document.querySelector(selector);
@@ -146,37 +146,39 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
       // Extract property title from h1
       const nombre = getText('h1') || '';
 
-      // Extract cover image URL
+      // Extract cover image URL (skip if requested)
       let imageUrl = '';
-      // Try multiple selectors for the cover image, prioritizing Zonaprop's specific structure
-      const imgSelectors = [
-        'img[class*="imgProperty"]', // Zonaprop uses imageGrid-module__imgProperty
-        'img[src*="zonapropcdn.com"]', // Direct match for Zonaprop CDN
-        'img[src*="avisos"]', // Zonaprop images are in /avisos/ path
-        'img[alt*="Foto"]',
-        'img[alt*="foto"]',
-        '.gallery-image img',
-        '.cover-image img',
-        'img[class*="gallery"]',
-        '.image-container img',
-        'article img',
-        '[data-testid*="image"] img',
-        '[data-testid*="photo"] img',
-      ];
+      if (!skipImages) {
+        // Try multiple selectors for the cover image, prioritizing Zonaprop's specific structure
+        const imgSelectors = [
+          'img[class*="imgProperty"]', // Zonaprop uses imageGrid-module__imgProperty
+          'img[src*="zonapropcdn.com"]', // Direct match for Zonaprop CDN
+          'img[src*="avisos"]', // Zonaprop images are in /avisos/ path
+          'img[alt*="Foto"]',
+          'img[alt*="foto"]',
+          '.gallery-image img',
+          '.cover-image img',
+          'img[class*="gallery"]',
+          '.image-container img',
+          'article img',
+          '[data-testid*="image"] img',
+          '[data-testid*="photo"] img',
+        ];
 
-      for (const selector of imgSelectors) {
-        const img = document.querySelector(selector);
-        if (img) {
-          const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
-          // Make sure it's not an icon, flag, or logo (these are usually small or in specific paths)
-          if (src &&
-              !src.includes('flag') &&
-              !src.includes('icon') &&
-              !src.includes('logo') &&
-              !src.includes('marker') &&
-              src.length > 30) { // Real image URLs are typically longer
-            imageUrl = src;
-            break;
+        for (const selector of imgSelectors) {
+          const img = document.querySelector(selector);
+          if (img) {
+            const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+            // Make sure it's not an icon, flag, or logo (these are usually small or in specific paths)
+            if (src &&
+                !src.includes('flag') &&
+                !src.includes('icon') &&
+                !src.includes('logo') &&
+                !src.includes('marker') &&
+                src.length > 30) { // Real image URLs are typically longer
+              imageUrl = src;
+              break;
+            }
           }
         }
       }
@@ -324,7 +326,7 @@ export async function scrapeZonapropListing(url: string): Promise<ScraperResult>
         bano,
         propertyDetails: propertyDetailsText, // For debugging
       };
-    });
+    }, skipImages);
 
     await browser.close();
 
