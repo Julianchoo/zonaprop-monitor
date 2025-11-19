@@ -138,27 +138,49 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
 
     console.log('Pagination link examples:', paginationInfo.paginationLinks);
 
-    // Calculate how many pages we need to scrape (30 properties per page)
+    // Build list of all page URLs to scrape
+    const pageUrls: string[] = [searchUrl]; // Page 1 (already on it)
+
+    // Calculate how many pages we need
     const propertiesPerPage = 30;
     const totalPages = totalResultsInfo.totalResults > 0
       ? Math.min(Math.ceil(totalResultsInfo.totalResults / propertiesPerPage), maxPages)
       : maxPages;
 
-    console.log(`Will scrape ${totalPages} pages to get all ${totalResultsInfo.totalResults} properties`);
+    // Use the actual pagination links we found, or construct them if needed
+    if (paginationInfo.paginationLinks.length > 0) {
+      // Extract unique page numbers from pagination links
+      const pageNumbers = new Set<number>();
+      paginationInfo.paginationLinks.forEach((link: string) => {
+        const match = link.match(/pagina-(\d+)/);
+        if (match) {
+          pageNumbers.add(parseInt(match[1], 10));
+        }
+      });
+
+      // Build URLs for pages 2 through totalPages
+      for (let i = 2; i <= totalPages; i++) {
+        // Use the pattern from actual pagination links
+        const pageUrl = searchUrl.replace(/\.html$/, `-pagina-${i}.html`);
+        pageUrls.push(pageUrl);
+      }
+    } else {
+      // Fallback: construct URLs manually
+      for (let i = 2; i <= totalPages; i++) {
+        const pageUrl = searchUrl.replace(/\.html$/, `-pagina-${i}.html`);
+        pageUrls.push(pageUrl);
+      }
+    }
+
+    console.log(`Will scrape ${pageUrls.length} pages to get all ${totalResultsInfo.totalResults} properties`);
 
     const allPropertyUrls = new Set<string>();
-    let currentPage = 1;
 
-    // Loop through all necessary pages
-    while (currentPage <= totalPages) {
-      // Build URL for current page
-      let pageUrl = searchUrl;
-      if (currentPage > 1) {
-        // Zonaprop uses "-pagina-2.html", "-pagina-3.html", etc.
-        pageUrl = searchUrl.replace(/\.html$/, `-pagina-${currentPage}.html`);
-      }
+    // Loop through all page URLs
+    for (let currentPage = 1; currentPage <= pageUrls.length; currentPage++) {
+      const pageUrl = pageUrls[currentPage - 1];
 
-      console.log(`Extracting from page ${currentPage}/${totalPages}: ${pageUrl}`);
+      console.log(`Extracting from page ${currentPage}/${pageUrls.length}: ${pageUrl}`);
 
       // Navigate to page if not already there (we already navigated to page 1)
       if (currentPage > 1) {
@@ -167,8 +189,10 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
           timeout: 60000,
         });
 
+        console.log(`Page ${currentPage} response status: ${pageResponse?.status()}`);
+
         if (!pageResponse || pageResponse.status() !== 200) {
-          console.log(`Page ${currentPage} returned error, stopping pagination`);
+          console.log(`Page ${currentPage} returned error ${pageResponse?.status()}, stopping pagination`);
           break;
         }
 
@@ -219,10 +243,8 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
 
       console.log(`Added ${newUrlsAdded} new unique URLs (total: ${allPropertyUrls.size})`);
 
-      currentPage++;
-
       // Add a small delay between page requests
-      if (currentPage <= totalPages) {
+      if (currentPage < pageUrls.length) {
         await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
       }
     }
@@ -231,7 +253,7 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
 
     const propertyUrls = Array.from(allPropertyUrls);
 
-    console.log(`Total unique property URLs found across ${currentPage - 1} pages: ${propertyUrls.length}`);
+    console.log(`Total unique property URLs found across ${pageUrls.length} pages: ${propertyUrls.length}`);
 
     if (propertyUrls.length === 0) {
       return {
