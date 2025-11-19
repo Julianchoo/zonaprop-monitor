@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const update of extractSearchResultsParallel(searchUrl, 0)) {
+          for await (const update of extractSearchResultsParallel(searchUrl, -1)) {
             // Only send the 'urls' event, stop before scraping
             if (update.type === 'urls') {
               const data = `data: ${JSON.stringify(update)}\n\n`;

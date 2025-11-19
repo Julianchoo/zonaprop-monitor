@@ -236,19 +236,24 @@ export async function* extractSearchResultsWithProgress(
       return;
     }
 
-    urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
+    // If maxProperties is 0 or negative, return ALL URLs without limit
+    if (maxProperties <= 0) {
+      urlsToExtract = searchResult.propertyUrls;
+    } else {
+      urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
+    }
     totalFoundInSearch = searchResult.totalUrls;
 
     // Send initial URLs only if this is the first call (not chunked)
     yield {
       type: 'urls' as const,
-      urls: searchResult.propertyUrls,
+      urls: searchResult.propertyUrls, // Return ALL URLs for frontend to decide
       totalFoundInSearch: totalFoundInSearch,
     };
   }
 
-  // If maxProperties is 0, just return URLs without scraping
-  if (maxProperties === 0) {
+  // If maxProperties is 0 or negative, just return URLs without scraping
+  if (maxProperties <= 0) {
     return;
   }
 
@@ -337,19 +342,24 @@ export async function* extractSearchResultsParallel(
       return;
     }
 
-    urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
+    // If maxProperties is 0 or negative, return ALL URLs without limit
+    if (maxProperties <= 0) {
+      urlsToExtract = searchResult.propertyUrls;
+    } else {
+      urlsToExtract = searchResult.propertyUrls.slice(0, maxProperties);
+    }
     totalFoundInSearch = searchResult.totalUrls;
 
     // Send initial URLs only if this is the first call (not chunked)
     yield {
       type: 'urls' as const,
-      urls: searchResult.propertyUrls,
+      urls: searchResult.propertyUrls, // Return ALL URLs for frontend to decide
       totalFoundInSearch: totalFoundInSearch,
     };
   }
 
-  // If maxProperties is 0, just return URLs without scraping
-  if (maxProperties === 0) {
+  // If maxProperties is 0 or negative, just return URLs without scraping
+  if (maxProperties <= 0) {
     return;
   }
 
