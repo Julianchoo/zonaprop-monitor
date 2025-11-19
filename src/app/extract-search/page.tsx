@@ -100,6 +100,7 @@ export default function ExtractSearchPage() {
 
             if (data.type === 'urls') {
               const totalProps = data.urls.length;
+              console.log(`🔍 Found ${totalProps} properties in search`);
               setTotalFoundInSearch(totalProps);
 
               // Calculate estimated time
@@ -119,11 +120,13 @@ export default function ExtractSearchPage() {
 
               // Show confirmation if more than 100 properties
               if (totalProps > 100) {
+                console.log(`⚠️ Large search detected (${totalProps} properties), showing confirmation dialog`);
                 setSkipImages(true); // Auto-enable skip images for large searches
                 setShowConfirmDialog(true);
                 setLoading(false);
                 return;
               } else {
+                console.log(`✅ Small search (${totalProps} properties), proceeding directly`);
                 // Proceed directly for smaller searches
                 await proceedWithExtraction(data.urls);
               }
