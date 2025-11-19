@@ -97,25 +97,46 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
     const totalResultsInfo = await (page as any).evaluate(() => {
       // Look for text like "402 Propiedades e inmuebles..."
       const headingSelectors = ['h1', '.postings-title', '[class*="title"]', '[class*="heading"]'];
+      const debugTexts: string[] = [];
 
       for (const selector of headingSelectors) {
         const elements = document.querySelectorAll(selector);
         for (const element of elements) {
           const text = element.textContent || '';
+          debugTexts.push(`${selector}: "${text.substring(0, 100)}"`);
           // Match patterns like "402 Propiedades" or "402 Propiedades e inmuebles"
-          const match = text.match(/^(\d+)\s+Propiedades/i);
+          const match = text.match(/(\d+)\s+Propiedades/i);
           if (match) {
             return {
               totalResults: parseInt(match[1], 10),
-              text: text.trim()
+              text: text.trim(),
+              debugTexts
             };
           }
         }
       }
-      return { totalResults: 0, text: '' };
+      return { totalResults: 0, text: '', debugTexts };
     });
 
     console.log(`Total results from page: ${totalResultsInfo.totalResults} (${totalResultsInfo.text})`);
+    if (totalResultsInfo.debugTexts && totalResultsInfo.debugTexts.length > 0) {
+      console.log('Debug heading texts:', totalResultsInfo.debugTexts.slice(0, 5));
+    }
+
+    // Extract pagination links to understand URL format
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const paginationInfo = await (page as any).evaluate(() => {
+      const paginationLinks: string[] = [];
+      // Look for pagination links
+      const links = document.querySelectorAll('a[href*="pagina"]');
+      links.forEach((link) => {
+        const href = link.getAttribute('href');
+        if (href) paginationLinks.push(href);
+      });
+      return { paginationLinks: paginationLinks.slice(0, 5) };
+    });
+
+    console.log('Pagination link examples:', paginationInfo.paginationLinks);
 
     // Calculate how many pages we need to scrape (30 properties per page)
     const propertiesPerPage = 30;
