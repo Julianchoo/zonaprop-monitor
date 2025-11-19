@@ -184,15 +184,36 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
 
       // Navigate to page if not already there (we already navigated to page 1)
       if (currentPage > 1) {
-        const pageResponse = await page.goto(pageUrl, {
-          waitUntil: 'domcontentloaded',
-          timeout: 60000,
-        });
+        // Try to find and click the "Next" button instead of direct navigation
+        // This makes it look more like a real user
+        try {
+          // Look for pagination link for this page
+          const nextPageLink = await page.$(`a[href*="pagina-${currentPage}"]`);
 
-        console.log(`Page ${currentPage} response status: ${pageResponse?.status()}`);
+          if (nextPageLink) {
+            console.log(`Clicking pagination link for page ${currentPage}...`);
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (nextPageLink as any).click()
+            ]);
+          } else {
+            // Fallback to direct navigation if button not found
+            console.log(`Pagination link not found, using direct navigation...`);
+            const pageResponse = await page.goto(pageUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: 60000,
+            });
 
-        if (!pageResponse || pageResponse.status() !== 200) {
-          console.log(`Page ${currentPage} returned error ${pageResponse?.status()}, stopping pagination`);
+            console.log(`Page ${currentPage} response status: ${pageResponse?.status()}`);
+
+            if (!pageResponse || pageResponse.status() !== 200) {
+              console.log(`Page ${currentPage} returned error ${pageResponse?.status()}, stopping pagination`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.error(`Error navigating to page ${currentPage}:`, error);
           break;
         }
 
