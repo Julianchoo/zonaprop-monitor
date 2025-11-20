@@ -5,12 +5,14 @@ export interface SearchScraperResult {
   totalUrls: number;
   propertyUrls?: string[];
   error?: string;
+  totalFoundInSearch?: number; // Total properties found in search (may be more than scraped)
+  limitedByAntiScraping?: boolean; // True if we couldn't scrape all properties
 }
 
 /**
  * Extract all property URLs from a Zonaprop search page (with pagination)
  */
-export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number = 20): Promise<SearchScraperResult> {
+export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScraperResult> {
   let browser;
 
   try {
@@ -138,41 +140,19 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
 
     console.log('Pagination link examples:', paginationInfo.paginationLinks);
 
-    // Build list of all page URLs to scrape
-    const pageUrls: string[] = [searchUrl]; // Page 1 (already on it)
-
-    // Calculate how many pages we need
+    // WARNING: Zonaprop has strong anti-scraping protection that blocks access to page 2+
+    // We can only scrape the first page (30 properties) reliably
     const propertiesPerPage = 30;
-    const totalPages = totalResultsInfo.totalResults > 0
-      ? Math.min(Math.ceil(totalResultsInfo.totalResults / propertiesPerPage), maxPages)
-      : maxPages;
+    const totalPropertiesFound = totalResultsInfo.totalResults;
 
-    // Use the actual pagination links we found, or construct them if needed
-    if (paginationInfo.paginationLinks.length > 0) {
-      // Extract unique page numbers from pagination links
-      const pageNumbers = new Set<number>();
-      paginationInfo.paginationLinks.forEach((link: string) => {
-        const match = link.match(/pagina-(\d+)/);
-        if (match) {
-          pageNumbers.add(parseInt(match[1], 10));
-        }
-      });
-
-      // Build URLs for pages 2 through totalPages
-      for (let i = 2; i <= totalPages; i++) {
-        // Use the pattern from actual pagination links
-        const pageUrl = searchUrl.replace(/\.html$/, `-pagina-${i}.html`);
-        pageUrls.push(pageUrl);
-      }
-    } else {
-      // Fallback: construct URLs manually
-      for (let i = 2; i <= totalPages; i++) {
-        const pageUrl = searchUrl.replace(/\.html$/, `-pagina-${i}.html`);
-        pageUrls.push(pageUrl);
-      }
+    if (totalPropertiesFound > propertiesPerPage) {
+      console.log(`⚠️  WARNING: Found ${totalPropertiesFound} properties, but can only scrape first ${propertiesPerPage} due to Zonaprop anti-scraping protection`);
     }
 
-    console.log(`Will scrape ${pageUrls.length} pages to get all ${totalResultsInfo.totalResults} properties`);
+    // Only scrape the first page
+    const pageUrls: string[] = [searchUrl];
+
+    console.log(`Will scrape ${pageUrls.length} page (first ${propertiesPerPage} properties of ${totalPropertiesFound} total)`);
 
     const allPropertyUrls = new Set<string>();
 
@@ -288,6 +268,8 @@ export async function scrapeSearchPageUrls(searchUrl: string, maxPages: number =
       success: true,
       totalUrls: propertyUrls.length,
       propertyUrls,
+      totalFoundInSearch: totalPropertiesFound,
+      limitedByAntiScraping: totalPropertiesFound > propertiesPerPage,
     };
   } catch (error) {
     console.error('Search scraping error:', error);
