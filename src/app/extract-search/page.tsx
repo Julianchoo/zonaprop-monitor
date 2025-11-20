@@ -37,11 +37,9 @@ export default function ExtractSearchPage() {
   const [searchUrl, setSearchUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
-  const [totalFoundInSearch, setTotalFoundInSearch] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [estimatedTime, setEstimatedTime] = useState("");
-  const [skipImages, setSkipImages] = useState(false);
+  const [showAntiScrapingWarning, setShowAntiScrapingWarning] = useState(false);
+  const [totalPropertiesInSearch, setTotalPropertiesInSearch] = useState(0);
 
   // Redirect if not authenticated
   if (!isPending && !session) {
@@ -100,36 +98,20 @@ export default function ExtractSearchPage() {
 
             if (data.type === 'urls') {
               const totalProps = data.urls.length;
-              console.log(`🔍 Found ${totalProps} properties in search`);
-              setTotalFoundInSearch(totalProps);
+              const totalInSearch = data.totalFoundInSearch || totalProps;
+              const isLimited = data.limitedByAntiScraping || false;
 
-              // Calculate estimated time
-              // With parallel processing (5 concurrent), approximately 0.4 min per property
-              const estimatedMinutes = Math.ceil((totalProps * 0.4) / 1);
+              console.log(`🔍 Found ${totalProps} properties (${totalInSearch} total in search, limited: ${isLimited})`);
+              setTotalPropertiesInSearch(totalInSearch);
 
-              let timeString = "";
-              if (estimatedMinutes < 60) {
-                timeString = `${estimatedMinutes} minutos`;
-              } else {
-                const hours = Math.floor(estimatedMinutes / 60);
-                const mins = estimatedMinutes % 60;
-                timeString = `${hours} hora${hours > 1 ? 's' : ''}${mins > 0 ? ` y ${mins} minutos` : ''}`;
+              // Show warning if limited by anti-scraping
+              if (isLimited && totalInSearch > totalProps) {
+                setShowAntiScrapingWarning(true);
               }
 
-              setEstimatedTime(timeString);
-
-              // Show confirmation if more than 100 properties
-              if (totalProps > 100) {
-                console.log(`⚠️ Large search detected (${totalProps} properties), showing confirmation dialog`);
-                setSkipImages(true); // Auto-enable skip images for large searches
-                setShowConfirmDialog(true);
-                setLoading(false);
-                return;
-              } else {
-                console.log(`✅ Small search (${totalProps} properties), proceeding directly`);
-                // Proceed directly for smaller searches
-                await proceedWithExtraction(data.urls);
-              }
+              // Proceed directly with extraction (always ≤30 properties now)
+              console.log(`✅ Proceeding with ${totalProps} properties`);
+              await proceedWithExtraction(data.urls);
             } else if (data.type === 'error') {
               throw new Error(data.error);
             }
@@ -143,7 +125,6 @@ export default function ExtractSearchPage() {
   };
 
   const proceedWithExtraction = async (allUrls: string[]) => {
-    setShowConfirmDialog(false);
     setLoading(true);
     setError(null);
     setProperties([]);
@@ -158,6 +139,7 @@ export default function ExtractSearchPage() {
       // Step 2: Process URLs in chunks of 10
       const CHUNK_SIZE = 10;
       const CONCURRENCY = 5; // Process 5 properties in parallel
+      const skipImages = false; // Always get images for small searches
 
       for (let i = 0; i < allUrls.length; i += CHUNK_SIZE) {
         await processChunk(allUrls, i, CHUNK_SIZE, CONCURRENCY, skipImages);
@@ -172,50 +154,6 @@ export default function ExtractSearchPage() {
 
   const handleExtract = async () => {
     await handleInitialCheck();
-  };
-
-  const handleConfirmExtraction = () => {
-    if (totalFoundInSearch && properties.length === 0) {
-      // Need to re-fetch URLs since we only got count
-      const trimmedUrl = searchUrl.trim();
-      fetch("/api/extract-search-stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ searchUrl: trimmedUrl }),
-      })
-        .then(async (response) => {
-          const reader = response.body?.getReader();
-          const decoder = new TextDecoder();
-          if (!reader) return;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n\n');
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'urls') {
-                  proceedWithExtraction(data.urls);
-                  return;
-                }
-              }
-            }
-          }
-        });
-    }
-  };
-
-  const handleCancelExtraction = () => {
-    setShowConfirmDialog(false);
-    setLoading(false);
-    setTotalFoundInSearch(null);
-    setEstimatedTime("");
   };
 
   const processChunk = async (
@@ -422,30 +360,23 @@ export default function ExtractSearchPage() {
           </CardContent>
         </Card>
 
-        {showConfirmDialog && (
+        {showAntiScrapingWarning && (
           <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription>
-              <div className="space-y-3">
-                <div>
-                  <p className="font-semibold text-amber-900 dark:text-amber-100">
-                    Se encontraron {totalFoundInSearch} propiedades en la búsqueda
-                  </p>
-                  <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
-                    Tiempo estimado: <strong>{estimatedTime}</strong>
-                  </p>
-                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                    Las fotos se omitirán automáticamente para acelerar el proceso.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleConfirmExtraction} size="sm" variant="default">
-                    Continuar
-                  </Button>
-                  <Button onClick={handleCancelExtraction} size="sm" variant="outline">
-                    Cancelar
-                  </Button>
-                </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-amber-900 dark:text-amber-100">
+                  ⚠️ Limitación de Anti-Scraping
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Se encontraron <strong>{totalPropertiesInSearch} propiedades</strong> en la búsqueda, pero Zonaprop bloquea el acceso a páginas adicionales.
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Solo se pueden extraer las primeras <strong>30 propiedades</strong> debido a la protección anti-bot de Zonaprop.
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300 italic">
+                  Tip: Refiná tu búsqueda en Zonaprop con más filtros para reducir los resultados a menos de 30 propiedades.
+                </p>
               </div>
             </AlertDescription>
           </Alert>
@@ -465,9 +396,9 @@ export default function ExtractSearchPage() {
                 <h2 className="text-2xl font-bold">Resultados</h2>
                 <p className="text-muted-foreground">
                   {properties.filter(p => p.status === 'completed').length} de {properties.length} propiedades extraídas
-                  {totalFoundInSearch && totalFoundInSearch > properties.length && (
+                  {showAntiScrapingWarning && totalPropertiesInSearch > properties.length && (
                     <span className="text-amber-600 dark:text-amber-400">
-                      {" "}(Se encontraron {totalFoundInSearch} en total, limitado a {properties.length})
+                      {" "}({totalPropertiesInSearch} encontradas en total, limitado a primeras {properties.length} por anti-scraping)
                     </span>
                   )}
                 </p>
