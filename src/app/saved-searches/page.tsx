@@ -73,8 +73,8 @@ export default function SavedSearchesPage() {
         }
     };
 
-    const handleRunSearch = (url: string) => {
-        router.push(`/extract-search?url=${encodeURIComponent(url)}`);
+    const handleRunSearch = (url: string, id: string) => {
+        router.push(`/extract-search?url=${encodeURIComponent(url)}&savedSearchId=${id}`);
     };
 
     if (isPending || loading) {
@@ -144,10 +144,20 @@ export default function SavedSearchesPage() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            <Link href={`/saved-searches/${search.id}`}>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="text-muted-foreground hover:text-foreground"
+                                                >
+                                                    <Calendar className="mr-2 h-4 w-4" />
+                                                    Historial
+                                                </Button>
+                                            </Link>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => handleRunSearch(search.url)}
+                                                onClick={() => handleRunSearch(search.url, search.id)}
                                                 className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                                             >
                                                 <Play className="mr-2 h-4 w-4" />

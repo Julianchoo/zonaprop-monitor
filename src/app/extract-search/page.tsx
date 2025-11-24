@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useSession } from "@/lib/auth-client";
-import { redirect } from "next/navigation";
+import { redirect, useSearchParams } from "next/navigation";
 
 interface PropertyData {
   url: string;
@@ -44,6 +44,9 @@ interface PropertyRow extends Partial<PropertyData> {
 
 export default function ExtractSearchPage() {
   const { data: session, isPending } = useSession();
+  const searchParams = useSearchParams();
+  const savedSearchId = searchParams.get("savedSearchId");
+  const [isSavingHistory, setIsSavingHistory] = useState(false);
   const [searchUrl, setSearchUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
@@ -59,6 +62,14 @@ export default function ExtractSearchPage() {
   if (!isPending && !session) {
     redirect("/");
   }
+
+  // Populate searchUrl from URL params on mount
+  useEffect(() => {
+    const urlParam = searchParams.get("url");
+    if (urlParam) {
+      setSearchUrl(decodeURIComponent(urlParam));
+    }
+  }, [searchParams]);
 
   const handleInitialCheck = async () => {
     setError(null);
@@ -180,6 +191,7 @@ export default function ExtractSearchPage() {
         body: JSON.stringify({
           name: searchName,
           url: searchUrl,
+          initialResults: properties.filter(p => p.status === 'completed'),
         }),
       });
 
@@ -297,6 +309,35 @@ export default function ExtractSearchPage() {
       }
     }
   };
+
+  // Auto-save history when extraction is complete and we have a savedSearchId
+  const saveHistory = async () => {
+    if (!savedSearchId || isSavingHistory || properties.length === 0) return;
+
+    const completedProps = properties.filter(p => p.status === 'completed');
+    if (completedProps.length === 0) return;
+
+    setIsSavingHistory(true);
+    try {
+      await fetch(`/api/saved-searches/${savedSearchId}/executions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ results: completedProps }),
+      });
+      // Optional: Show toast
+    } catch (error) {
+      console.error("Error saving history:", error);
+    } finally {
+      setIsSavingHistory(false);
+    }
+  };
+
+  // Trigger save when loading finishes and we have results
+  useEffect(() => {
+    if (!loading && properties.length > 0 && savedSearchId) {
+      saveHistory();
+    }
+  }, [loading, properties.length, savedSearchId]);
 
   const handleExportCSV = () => {
     const completedProperties = properties.filter(p => p.status === 'completed');

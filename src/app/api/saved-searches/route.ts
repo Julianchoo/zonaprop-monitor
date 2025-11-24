@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { savedSearch } from "@/lib/schema";
+import { savedSearch, searchExecution } from "@/lib/schema";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -40,23 +40,39 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const { name, url } = body;
+        const { name, url, initialResults } = body;
 
         if (!name || !url) {
             return new NextResponse("Missing required fields", { status: 400 });
         }
 
-        const newSearch = await db
-            .insert(savedSearch)
-            .values({
-                id: nanoid(),
-                userId: session.user.id,
-                name,
-                url,
-            })
-            .returning();
+        const newSearchId = nanoid();
 
-        return NextResponse.json(newSearch[0]);
+        // Use transaction to ensure both records are created
+        const result = await db.transaction(async (tx) => {
+            const [newSearch] = await tx
+                .insert(savedSearch)
+                .values({
+                    id: newSearchId,
+                    userId: session.user.id,
+                    name,
+                    url,
+                })
+                .returning();
+
+            if (initialResults && Array.isArray(initialResults) && initialResults.length > 0) {
+                await tx.insert(searchExecution).values({
+                    id: nanoid(),
+                    savedSearchId: newSearchId,
+                    resultsCount: initialResults.length,
+                    results: initialResults,
+                });
+            }
+
+            return newSearch;
+        });
+
+        return NextResponse.json(result);
     } catch (error) {
         console.error("Error creating saved search:", error);
         return new NextResponse("Internal Server Error", { status: 500 });

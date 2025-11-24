@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -59,4 +59,14 @@ export const savedSearch = pgTable("saved_search", {
   url: text("url").notNull(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   lastScrapedAt: timestamp("lastScrapedAt"),
+});
+
+export const searchExecution = pgTable("search_execution", {
+  id: text("id").primaryKey(),
+  savedSearchId: text("savedSearchId")
+    .notNull()
+    .references(() => savedSearch.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  resultsCount: integer("resultsCount").notNull(),
+  results: jsonb("results").notNull(),
 });
