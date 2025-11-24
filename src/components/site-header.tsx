@@ -55,6 +55,15 @@ export function SiteHeader() {
               >
                 Extraer Búsqueda
               </Link>
+              <Link
+                href="/saved-searches"
+                className={cn(
+                  "text-sm font-medium transition-colors hover:text-primary",
+                  pathname === "/saved-searches" ? "text-foreground" : "text-muted-foreground"
+                )}
+              >
+                Guardadas
+              </Link>
             </nav>
           </div>
 

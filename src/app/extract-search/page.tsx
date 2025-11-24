@@ -5,7 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertCircle, Download, Search } from "lucide-react";
+import { Loader2, AlertCircle, Download, Search, Save } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useSession } from "@/lib/auth-client";
 import { redirect } from "next/navigation";
 
@@ -40,6 +50,10 @@ export default function ExtractSearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAntiScrapingWarning, setShowAntiScrapingWarning] = useState(false);
   const [totalPropertiesInSearch, setTotalPropertiesInSearch] = useState(0);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [searchName, setSearchName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
   // Redirect if not authenticated
   if (!isPending && !session) {
@@ -48,6 +62,7 @@ export default function ExtractSearchPage() {
 
   const handleInitialCheck = async () => {
     setError(null);
+    setStatusMessage("Iniciando conexión...");
 
     const trimmedUrl = searchUrl.trim();
 
@@ -152,6 +167,38 @@ export default function ExtractSearchPage() {
     }
   };
 
+  const handleSaveSearch = async () => {
+    if (!searchName.trim() || !searchUrl.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/saved-searches", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: searchName,
+          url: searchUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Error al guardar la búsqueda");
+      }
+
+      setIsSaveDialogOpen(false);
+      setSearchName("");
+      // Optional: Show success toast or message
+      alert("Búsqueda guardada exitosamente");
+    } catch (err) {
+      console.error(err);
+      alert("Error al guardar la búsqueda");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleExtract = async () => {
     await handleInitialCheck();
   };
@@ -202,6 +249,10 @@ export default function ExtractSearchPage() {
             const data = JSON.parse(line.slice(6));
 
             switch (data.type) {
+              case 'status':
+                setStatusMessage(data.message);
+                break;
+
               case 'scraping':
                 // Mark property as currently scraping
                 setProperties(prev => prev.map((prop, idx) =>
@@ -239,6 +290,11 @@ export default function ExtractSearchPage() {
     } catch (err) {
       console.error(`Error processing chunk ${startIndex}:`, err);
       // Mark chunk properties as error but continue with next chunk
+      for (let i = startIndex; i < Math.min(startIndex + chunkSize, properties.length); i++) {
+        setProperties(prev => prev.map((prop, idx) =>
+          idx === i && prop.status === 'pending' ? { ...prop, status: 'error' as const, error: 'Error al procesar el lote' } : prop
+        ));
+      }
     }
   };
 
@@ -342,6 +398,42 @@ export default function ExtractSearchPage() {
                   </>
                 )}
               </Button>
+              <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="lg" disabled={!searchUrl.trim() || loading}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Guardar
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Guardar Búsqueda</DialogTitle>
+                    <DialogDescription>
+                      Guardá esta búsqueda para volver a ejecutarla fácilmente más tarde.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="name" className="text-right">
+                        Nombre
+                      </Label>
+                      <Input
+                        id="name"
+                        value={searchName}
+                        onChange={(e) => setSearchName(e.target.value)}
+                        placeholder="Ej: Deptos Belgrano 3 amb"
+                        className="col-span-3"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleSaveSearch} disabled={isSaving || !searchName.trim()}>
+                      {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Guardar
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               {!loading && (
                 <Alert className="flex-1">
                   <AlertDescription className="text-sm">
@@ -352,7 +444,7 @@ export default function ExtractSearchPage() {
               {loading && (
                 <Alert className="flex-1">
                   <AlertDescription className="text-sm font-medium">
-                    Extrayendo propiedades... Por favor no cierres esta página. Esto puede tardar varios minutos.
+                    {statusMessage || "Extrayendo propiedades... Por favor no cierres esta página. Esto puede tardar varios minutos."}
                   </AlertDescription>
                 </Alert>
               )}
@@ -440,8 +532,8 @@ export default function ExtractSearchPage() {
                         prop.status === 'scraping'
                           ? "bg-blue-50 dark:bg-blue-950/30"
                           : prop.status === 'error'
-                          ? "bg-red-50 dark:bg-red-950/30"
-                          : "hover:bg-muted/50"
+                            ? "bg-red-50 dark:bg-red-950/30"
+                            : "hover:bg-muted/50"
                       }
                     >
                       <td className="px-4 py-3 text-sm">

@@ -49,3 +49,14 @@ export const verification = pgTable("verification", {
   createdAt: timestamp("createdAt").defaultNow(),
   updatedAt: timestamp("updatedAt").defaultNow(),
 });
+
+export const savedSearch = pgTable("saved_search", {
+  id: text("id").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  lastScrapedAt: timestamp("lastScrapedAt"),
+});

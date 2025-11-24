@@ -77,7 +77,7 @@ export async function scrapeSearchPageUrls(searchUrl: string): Promise<SearchScr
 
     const response = await page.goto(searchUrl, {
       waitUntil: 'domcontentloaded',
-      timeout: 60000,
+      timeout: 45000,
     });
 
     console.log(`Response status: ${response?.status()}`);
