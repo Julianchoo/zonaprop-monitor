@@ -7,6 +7,7 @@ import { Loader2, ArrowLeft, Calendar, ExternalLink, Download } from "lucide-rea
 import { useSession } from "@/lib/auth-client";
 import { redirect, useParams } from "next/navigation";
 import Link from "next/link";
+import type { PropertyData } from "@/lib/scraper";
 import {
     Table,
     TableBody,
@@ -20,7 +21,7 @@ interface SearchExecution {
     id: string;
     createdAt: string;
     resultsCount: number;
-    results: any[]; // Using any for simplicity, but ideally should be typed
+    results: PropertyData[];
 }
 
 export default function SearchHistoryPage() {
@@ -81,7 +82,7 @@ export default function SearchHistoryPage() {
             "URL",
         ];
 
-        const rows = selectedExecution.results.map((prop: any) => [
+        const rows = selectedExecution.results.map((prop) => [
             prop.nombre,
             prop.direccion,
             prop.barrio,
@@ -217,7 +218,7 @@ export default function SearchHistoryPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {selectedExecution.results.map((prop: any, idx: number) => (
+                                            {selectedExecution.results.map((prop, idx) => (
                                                 <TableRow key={idx}>
                                                     <TableCell>
                                                         {prop.imageUrl && (

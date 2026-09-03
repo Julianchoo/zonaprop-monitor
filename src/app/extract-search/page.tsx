@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +42,7 @@ interface PropertyRow extends Partial<PropertyData> {
   error?: string;
 }
 
-export default function ExtractSearchPage() {
+function ExtractSearchContent() {
   const { data: session, isPending } = useSession();
   const searchParams = useSearchParams();
   const savedSearchId = searchParams.get("savedSearchId");
@@ -658,5 +658,19 @@ export default function ExtractSearchPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function ExtractSearchPage() {
+  return (
+    <Suspense
+      fallback={(
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      )}
+    >
+      <ExtractSearchContent />
+    </Suspense>
   );
 }
