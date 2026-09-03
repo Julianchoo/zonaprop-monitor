@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { randomUUID } from "node:crypto";
 
 export async function GET() {
     try {
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
             return new NextResponse("Missing required fields", { status: 400 });
         }
 
-        const newSearchId = nanoid();
+        const newSearchId = randomUUID();
 
         // Use transaction to ensure both records are created
         const result = await db.transaction(async (tx) => {
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
             if (initialResults && Array.isArray(initialResults) && initialResults.length > 0) {
                 await tx.insert(searchExecution).values({
-                    id: nanoid(),
+                    id: randomUUID(),
                     savedSearchId: newSearchId,
                     resultsCount: initialResults.length,
                     results: initialResults,
