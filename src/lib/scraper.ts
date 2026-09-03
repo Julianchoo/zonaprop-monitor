@@ -109,7 +109,9 @@ export async function scrapeZonapropListing(url: string, skipImages: boolean = f
     // Navigate to the listing
     const response = await page.goto(url, {
       waitUntil: 'domcontentloaded',
-      timeout: 60000,
+      // Leave enough time for the route to report a per-property failure
+      // instead of Vercel terminating the whole 60 second invocation.
+      timeout: process.env.VERCEL ? 25000 : 60000,
     });
 
     // Wait for dynamic content to load

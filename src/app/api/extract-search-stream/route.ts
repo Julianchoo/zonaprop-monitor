@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 // Vercel hobby plan limit is 300 seconds
 // With parallel processing (5 concurrent), 10 properties takes ~10-15s
 export const maxDuration = 60;
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,11 +23,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { searchUrl, urls, startIndex = 0, limit = 10, concurrency = 5, skipImages = false } = body;
+    const { searchUrl, urls, startIndex = 0, limit = 2, concurrency = 2, skipImages = false } = body;
 
     // If URLs are provided, process them directly (chunked processing)
     if (urls && Array.isArray(urls)) {
-      console.log(`Processing chunk: ${startIndex} to ${startIndex + limit} (concurrency: ${concurrency}, skipImages: ${skipImages})`);
+      // Each property currently opens its own Chromium instance. Keep Vercel
+      // requests small enough to finish before the 60 second function limit.
+      const safeLimit = Math.max(1, Math.min(Number(limit) || 2, 2));
+      const safeConcurrency = Math.max(1, Math.min(Number(concurrency) || 2, 2));
+
+      console.log(`Processing chunk: ${startIndex} to ${startIndex + safeLimit} (concurrency: ${safeConcurrency}, skipImages: ${skipImages})`);
 
       // Create a readable stream for SSE
       const encoder = new TextEncoder();
@@ -35,10 +41,10 @@ export async function POST(request: NextRequest) {
           try {
             for await (const update of extractSearchResultsParallel(
               '',
-              limit,
+              safeLimit,
               urls,
               startIndex,
-              concurrency,
+              safeConcurrency,
               skipImages
             )) {
               const data = `data: ${JSON.stringify(update)}\n\n`;

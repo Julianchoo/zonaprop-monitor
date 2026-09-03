@@ -105,6 +105,7 @@ export default function ExtractSearchPage() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
+      let initialBuffer = "";
 
       if (!reader) {
         throw new Error("No se pudo leer la respuesta");
@@ -115,8 +116,9 @@ export default function ExtractSearchPage() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
+        initialBuffer += decoder.decode(value, { stream: true });
+        const lines = initialBuffer.split('\n\n');
+        initialBuffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -162,9 +164,9 @@ export default function ExtractSearchPage() {
         status: 'pending' as const,
       })));
 
-      // Step 2: Process URLs in chunks of 10
-      const CHUNK_SIZE = 10;
-      const CONCURRENCY = 5; // Process 5 properties in parallel
+      // Keep each serverless invocation below Vercel's 60 second limit.
+      const CHUNK_SIZE = 2;
+      const CONCURRENCY = 2;
       const skipImages = false; // Always get images for small searches
 
       for (let i = 0; i < allUrls.length; i += CHUNK_SIZE) {
@@ -244,6 +246,7 @@ export default function ExtractSearchPage() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
+      let buffer = "";
 
       if (!reader) {
         throw new Error("No se pudo leer la respuesta");
@@ -253,8 +256,9 @@ export default function ExtractSearchPage() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -288,8 +292,9 @@ export default function ExtractSearchPage() {
 
               case 'error':
                 console.error(`Error in chunk ${startIndex}:`, data.error);
+                setError(data.error || `Error procesando el lote ${startIndex + 1}`);
                 // Mark remaining properties in this chunk as error
-                for (let i = startIndex; i < Math.min(startIndex + chunkSize, properties.length); i++) {
+                for (let i = startIndex; i < Math.min(startIndex + chunkSize, allUrls.length); i++) {
                   setProperties(prev => prev.map((prop, idx) =>
                     idx === i && prop.status === 'pending' ? { ...prop, status: 'error' as const, error: 'Error en el chunk' } : prop
                   ));
@@ -301,8 +306,9 @@ export default function ExtractSearchPage() {
       }
     } catch (err) {
       console.error(`Error processing chunk ${startIndex}:`, err);
+      setError(err instanceof Error ? err.message : `Error procesando el lote ${startIndex + 1}`);
       // Mark chunk properties as error but continue with next chunk
-      for (let i = startIndex; i < Math.min(startIndex + chunkSize, properties.length); i++) {
+      for (let i = startIndex; i < Math.min(startIndex + chunkSize, allUrls.length); i++) {
         setProperties(prev => prev.map((prop, idx) =>
           idx === i && prop.status === 'pending' ? { ...prop, status: 'error' as const, error: 'Error al procesar el lote' } : prop
         ));
