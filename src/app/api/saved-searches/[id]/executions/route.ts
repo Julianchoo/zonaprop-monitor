@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { eq, desc, and } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { randomUUID } from "node:crypto";
 
 export async function GET(
     req: Request,
@@ -76,7 +76,7 @@ export async function POST(
         const newExecution = await db
             .insert(searchExecution)
             .values({
-                id: nanoid(),
+                id: randomUUID(),
                 savedSearchId: id,
                 resultsCount: results.length,
                 results: results,
