@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
+import type { GeoPolygon } from "./geo";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -57,6 +58,8 @@ export const savedSearch = pgTable("saved_search", {
     .references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   url: text("url").notNull(),
+  // Optional area drawn on the map; results outside of it are discarded
+  polygon: jsonb("polygon").$type<GeoPolygon>(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   lastScrapedAt: timestamp("lastScrapedAt"),
 });

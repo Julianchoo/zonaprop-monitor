@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Trash2, Play, ExternalLink, Calendar } from "lucide-react";
+import { Loader2, Trash2, Play, ExternalLink, Calendar, MapPin } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import type { GeoPolygon } from "@/lib/geo";
 import { useSession } from "@/lib/auth-client";
 import { redirect, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -13,6 +15,7 @@ interface SavedSearch {
     id: string;
     name: string;
     url: string;
+    polygon: GeoPolygon | null;
     createdAt: string;
     lastScrapedAt: string | null;
 }
@@ -134,7 +137,15 @@ export default function SavedSearchesPage() {
                                 <CardContent className="p-6">
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                         <div className="space-y-1">
-                                            <h3 className="font-semibold text-lg">{search.name}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-semibold text-lg">{search.name}</h3>
+                                                {search.polygon && (
+                                                    <Badge variant="secondary">
+                                                        <MapPin className="mr-1 h-3 w-3" />
+                                                        Zona dibujada
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <p className="text-sm text-muted-foreground truncate max-w-2xl" title={search.url}>
                                                 {search.url}
                                             </p>

@@ -5,6 +5,36 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 
+export async function GET(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers(),
+        });
+
+        if (!session) {
+            return new NextResponse("Unauthorized", { status: 401 });
+        }
+
+        const { id } = await params;
+
+        const search = await db.query.savedSearch.findFirst({
+            where: and(eq(savedSearch.id, id), eq(savedSearch.userId, session.user.id)),
+        });
+
+        if (!search) {
+            return new NextResponse("Not Found", { status: 404 });
+        }
+
+        return NextResponse.json(search);
+    } catch (error) {
+        console.error("Error fetching saved search:", error);
+        return new NextResponse("Internal Server Error", { status: 500 });
+    }
+}
+
 export async function DELETE(
     req: Request,
     { params }: { params: Promise<{ id: string }> }

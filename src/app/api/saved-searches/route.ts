@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { parsePolygon } from "@/lib/geo";
 
 export async function GET() {
     try {
@@ -46,6 +47,11 @@ export async function POST(req: Request) {
             return new NextResponse("Missing required fields", { status: 400 });
         }
 
+        const polygon = body.polygon == null ? null : parsePolygon(body.polygon);
+        if (body.polygon != null && !polygon) {
+            return new NextResponse("Invalid polygon", { status: 400 });
+        }
+
         const newSearchId = randomUUID();
 
         // Use transaction to ensure both records are created
@@ -57,6 +63,7 @@ export async function POST(req: Request) {
                     userId: session.user.id,
                     name,
                     url,
+                    polygon,
                 })
                 .returning();
 

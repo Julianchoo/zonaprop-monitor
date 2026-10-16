@@ -13,6 +13,8 @@ export interface PropertyData {
   moneda: string | null; // USD or ARS
   expensas: number | null;
   precioM2: number | null; // calculated: precio / m2Totales
+  latitud: number | null;
+  longitud: number | null;
 }
 
 export interface ScraperResult {
@@ -36,6 +38,16 @@ function extractNumber(text: string | null | undefined): number | null {
 
   const num = parseFloat(normalized);
   return isNaN(num) ? null : num;
+}
+
+/**
+ * Parse a decimal coordinate, discarding missing, malformed or (0, 0) values
+ */
+function parseCoordinate(text: string | null | undefined, limit: number): number | null {
+  if (!text) return null;
+  const value = parseFloat(text);
+  if (!Number.isFinite(value) || value === 0 || Math.abs(value) > limit) return null;
+  return value;
 }
 
 /**
@@ -313,6 +325,25 @@ export async function scrapeZonapropListing(url: string, skipImages: boolean = f
         bano = banoMatch[1];
       }
 
+      // Zonaprop embeds the map coordinates as base64 strings in an inline script:
+      // mapLatOf = "LTM0LjU2..."; mapLngOf = "LTU4LjQ2...";
+      const decodeCoordinate = (name: string): string | null => {
+        const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+        for (const script of scripts) {
+          const match = script.textContent?.match(new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`));
+          if (match) {
+            try {
+              return atob(match[1]);
+            } catch {
+              return null;
+            }
+          }
+        }
+        return null;
+      };
+      const latitudText = decodeCoordinate('mapLatOf');
+      const longitudText = decodeCoordinate('mapLngOf');
+
       return {
         nombre,
         imageUrl,
@@ -327,6 +358,8 @@ export async function scrapeZonapropListing(url: string, skipImages: boolean = f
         dormitorios: dormitorios || ambientesText, // Use ambientes as fallback for dormitorios
         bano,
         propertyDetails: propertyDetailsText, // For debugging
+        latitudText,
+        longitudText,
       };
     }, skipImages);
 
@@ -345,6 +378,9 @@ export async function scrapeZonapropListing(url: string, skipImages: boolean = f
     // Calculate price per square meter
     const precioM2 = precio && m2Totales ? Math.round(precio / m2Totales) : null;
 
+    const latitud = parseCoordinate(data.latitudText, 90);
+    const longitud = parseCoordinate(data.longitudText, 180);
+
     const propertyData: PropertyData = {
       url,
       imageUrl: data.imageUrl || null,
@@ -360,6 +396,8 @@ export async function scrapeZonapropListing(url: string, skipImages: boolean = f
       moneda: data.moneda,
       expensas,
       precioM2,
+      latitud,
+      longitud,
     };
 
     console.log('Extracted data:', propertyData);

@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertCircle, Download, Search, Save } from "lucide-react";
+import { Loader2, AlertCircle, Download, Search, Save, MapPin } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,18 @@ import {
 import { Label } from "@/components/ui/label";
 import { useSession } from "@/lib/auth-client";
 import { redirect, useSearchParams } from "next/navigation";
+import { isPointInPolygon, type GeoPolygon } from "@/lib/geo";
+import type { ZoneMapMarker } from "@/components/map/zone-map";
+
+// Leaflet needs `window`, so the map is only rendered on the client
+const ZoneMap = dynamic(() => import("@/components/map/zone-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[420px] w-full items-center justify-center rounded-lg border bg-muted/50">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  ),
+});
 
 interface PropertyData {
   url: string;
@@ -34,6 +47,8 @@ interface PropertyData {
   moneda: string | null;
   expensas: number | null;
   precioM2: number | null;
+  latitud: number | null;
+  longitud: number | null;
 }
 
 interface PropertyRow extends Partial<PropertyData> {
@@ -57,6 +72,8 @@ function ExtractSearchContent() {
   const [searchName, setSearchName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  const [polygon, setPolygon] = useState<GeoPolygon | null>(null);
+  const [showOutsideZone, setShowOutsideZone] = useState(false);
 
   // Redirect if not authenticated
   if (!isPending && !session) {
@@ -70,6 +87,50 @@ function ExtractSearchContent() {
       setSearchUrl(decodeURIComponent(urlParam));
     }
   }, [searchParams]);
+
+  // Load the drawn zone of the saved search being re-run
+  useEffect(() => {
+    if (!savedSearchId) return;
+
+    fetch(`/api/saved-searches/${savedSearchId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.polygon) setPolygon(data.polygon);
+      })
+      .catch((err) => console.error("Error loading saved search:", err));
+  }, [savedSearchId]);
+
+  // Properties are filtered against the current zone, so redrawing it re-filters
+  // already extracted results without scraping again.
+  const isInZone = (prop: PropertyRow) => {
+    if (!polygon) return true;
+    if (prop.latitud == null || prop.longitud == null) return false;
+    return isPointInPolygon({ lat: prop.latitud, lng: prop.longitud }, polygon);
+  };
+
+  const completedInZone = properties.filter(p => p.status === 'completed' && isInZone(p));
+  const outsideZoneCount = properties.filter(p => p.status === 'completed' && !isInZone(p)).length;
+  const visibleProperties = showOutsideZone
+    ? properties
+    : properties.filter(p => p.status !== 'completed' || isInZone(p));
+
+  const mapMarkers = useMemo<ZoneMapMarker[]>(
+    () =>
+      properties
+        .filter(p => p.status === 'completed' && p.latitud != null && p.longitud != null)
+        .filter(p => {
+          if (!polygon) return true;
+          return isPointInPolygon({ lat: p.latitud!, lng: p.longitud! }, polygon);
+        })
+        .map(p => ({
+          lat: p.latitud!,
+          lng: p.longitud!,
+          title: p.nombre || p.direccion || "Propiedad",
+          subtitle: p.precio ? `${p.moneda ?? ""} ${p.precio.toLocaleString()}`.trim() : undefined,
+          url: p.url,
+        })),
+    [properties, polygon]
+  );
 
   const handleInitialCheck = async () => {
     setError(null);
@@ -193,7 +254,8 @@ function ExtractSearchContent() {
         body: JSON.stringify({
           name: searchName,
           url: searchUrl,
-          initialResults: properties.filter(p => p.status === 'completed'),
+          polygon,
+          initialResults: completedInZone,
         }),
       });
 
@@ -320,7 +382,7 @@ function ExtractSearchContent() {
   const saveHistory = async () => {
     if (!savedSearchId || isSavingHistory || properties.length === 0) return;
 
-    const completedProps = properties.filter(p => p.status === 'completed');
+    const completedProps = completedInZone;
     if (completedProps.length === 0) return;
 
     setIsSavingHistory(true);
@@ -346,7 +408,7 @@ function ExtractSearchContent() {
   }, [loading, properties.length, savedSearchId]);
 
   const handleExportCSV = () => {
-    const completedProperties = properties.filter(p => p.status === 'completed');
+    const completedProperties = completedInZone;
     if (completedProperties.length === 0) return;
 
     const headers = [
@@ -362,6 +424,8 @@ function ExtractSearchContent() {
       "Moneda",
       "Expensas",
       "$/m2",
+      "Latitud",
+      "Longitud",
       "URL",
     ];
 
@@ -378,6 +442,8 @@ function ExtractSearchContent() {
       prop.moneda ?? "",
       prop.expensas ?? "",
       prop.precioM2 ?? "",
+      prop.latitud ?? "",
+      prop.longitud ?? "",
       prop.url,
     ]);
 
@@ -409,7 +475,7 @@ function ExtractSearchContent() {
         <div>
           <h1 className="text-3xl font-bold">Extraer Búsqueda</h1>
           <p className="text-muted-foreground mt-2">
-            Pega una URL de búsqueda de Zonaprop para extraer todas las propiedades de los resultados
+            Pega una URL de búsqueda de Zonaprop y, si querés, dibujá en el mapa la zona exacta que te interesa
           </p>
         </div>
 
@@ -457,6 +523,7 @@ function ExtractSearchContent() {
                     <DialogTitle>Guardar Búsqueda</DialogTitle>
                     <DialogDescription>
                       Guardá esta búsqueda para volver a ejecutarla fácilmente más tarde.
+                      {polygon && " La zona dibujada en el mapa se guarda junto con la búsqueda."}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
@@ -499,6 +566,30 @@ function ExtractSearchContent() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Zona en el mapa
+              <span className="text-sm font-normal text-muted-foreground">(opcional)</span>
+            </CardTitle>
+            <CardDescription>
+              Dibujá un polígono para quedarte solo con las propiedades que caen dentro de esa zona.
+              Los filtros de tipo, operación y precio siguen saliendo de la URL de Zonaprop. Como solo
+              se leen las primeras 30 propiedades de la búsqueda, usá una URL de barrio que cubra la zona
+              dibujada para obtener más resultados.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ZoneMap
+              polygon={polygon}
+              onPolygonChange={setPolygon}
+              markers={mapMarkers}
+              disabled={loading}
+            />
+          </CardContent>
+        </Card>
+
         {showAntiScrapingWarning && (
           <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900">
             <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -535,6 +626,11 @@ function ExtractSearchContent() {
                 <h2 className="text-2xl font-bold">Resultados</h2>
                 <p className="text-muted-foreground">
                   {properties.filter(p => p.status === 'completed').length} de {properties.length} propiedades extraídas
+                  {polygon && (
+                    <span>
+                      {" "}· {completedInZone.length} dentro de la zona dibujada
+                    </span>
+                  )}
                   {showAntiScrapingWarning && totalPropertiesInSearch > properties.length && (
                     <span className="text-amber-600 dark:text-amber-400">
                       {" "}({totalPropertiesInSearch} encontradas en total, limitado a primeras {properties.length} por anti-scraping)
@@ -542,12 +638,21 @@ function ExtractSearchContent() {
                   )}
                 </p>
               </div>
-              {properties.some(p => p.status === 'completed') && (
-                <Button onClick={handleExportCSV} variant="outline">
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar CSV
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {polygon && outsideZoneCount > 0 && (
+                  <Button onClick={() => setShowOutsideZone(prev => !prev)} variant="ghost">
+                    {showOutsideZone
+                      ? "Ocultar fuera de zona"
+                      : `Mostrar ${outsideZoneCount} fuera de zona`}
+                  </Button>
+                )}
+                {completedInZone.length > 0 && (
+                  <Button onClick={handleExportCSV} variant="outline">
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="border rounded-lg overflow-x-auto">
@@ -572,15 +677,17 @@ function ExtractSearchContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {properties.map((prop, index) => (
+                  {visibleProperties.map((prop) => (
                     <tr
-                      key={index}
+                      key={prop.url}
                       className={
                         prop.status === 'scraping'
                           ? "bg-blue-50 dark:bg-blue-950/30"
                           : prop.status === 'error'
                             ? "bg-red-50 dark:bg-red-950/30"
-                            : "hover:bg-muted/50"
+                            : prop.status === 'completed' && !isInZone(prop)
+                              ? "opacity-50"
+                              : "hover:bg-muted/50"
                       }
                     >
                       <td className="px-4 py-3 text-sm">
@@ -590,8 +697,16 @@ function ExtractSearchContent() {
                         {prop.status === 'pending' && (
                           <span className="text-muted-foreground">⏳</span>
                         )}
-                        {prop.status === 'completed' && (
+                        {prop.status === 'completed' && isInZone(prop) && (
                           <span className="text-green-600">✓</span>
+                        )}
+                        {prop.status === 'completed' && !isInZone(prop) && (
+                          <span
+                            className="text-muted-foreground"
+                            title={prop.latitud == null ? "Sin ubicación en el aviso" : "Fuera de la zona dibujada"}
+                          >
+                            <MapPin className="h-4 w-4" />
+                          </span>
                         )}
                         {prop.status === 'error' && (
                           <span className="text-red-600" title={prop.error}>✗</span>
